@@ -29,7 +29,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: module-zip
-        path: out/magisk_module_release/*.zip
+        path: out/*.zip # <-- ИСПРАВЛЕННЫЙ ПУТЬ
 
   release:
     needs: build
