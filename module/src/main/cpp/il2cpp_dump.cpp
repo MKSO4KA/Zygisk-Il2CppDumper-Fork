@@ -12,6 +12,8 @@
 #include <sstream>
 #include <fstream>
 #include <unistd.h>
+#include <link.h>
+#include <cinttypes>
 #include "xdl.h"
 #include "log.h"
 #include "il2cpp-tabledefs.h"
@@ -322,6 +324,80 @@ std::string dump_type(const Il2CppType *type) {
     return outPut.str();
 }
 
+// Структура для передачи данных в callback-функцию
+struct ModuleInfo {
+    uintptr_t base;
+    size_t size;
+    const char* name;
+};
+
+// Callback-функция для dl_iterate_phdr
+static int find_il2cpp_callback(struct dl_phdr_info *info, size_t size, void *data) {
+    auto moduleInfo = reinterpret_cast<ModuleInfo*>(data);
+    // Ищем библиотеку по имени
+    if (strstr(info->dlpi_name, moduleInfo->name)) {
+        moduleInfo->base = info->dlpi_addr;
+
+        // Вычисляем полный размер модуля в памяти,
+        // проходя по всем его сегментам PT_LOAD
+        size_t max_vaddr = 0;
+        for (int i = 0; i < info->dlpi_phnum; ++i) {
+            const ElfW(Phdr) *phdr = &info->dlpi_phdr[i];
+            if (phdr->p_type == PT_LOAD) {
+                size_t segment_end = phdr->p_vaddr + phdr->p_memsz;
+                if (segment_end > max_vaddr) {
+                    max_vaddr = segment_end;
+                }
+            }
+        }
+        moduleInfo->size = max_vaddr;
+
+        // Возвращаем ненулевое значение, чтобы остановить итерацию
+        return 1;
+    }
+    return 0;
+}
+
+void dump_memory_to_file(const char *outDir) {
+    LOGI("Starting binary dump of libil2cpp.so...");
+
+    ModuleInfo moduleInfo = {0, 0, "libil2cpp.so"};
+
+    // Ищем информацию о модуле
+    dl_iterate_phdr(find_il2cpp_callback, &moduleInfo);
+
+    if (moduleInfo.base == 0 || moduleInfo.size == 0) {
+        LOGE("Could not find libil2cpp.so in memory!");
+        return;
+    }
+
+    // ИСПРАВЛЕННАЯ СТРОКА
+    LOGI("libil2cpp.so found in memory: base=0x%" PRIxPTR ", size=%zu bytes", moduleInfo.base, moduleInfo.size);
+
+    // Формируем путь для сохранения файла
+    auto outPath = std::string(outDir).append("/files/libil2cpp.decrypted.so");
+
+    LOGI("Writing binary dump to: %s", outPath.c_str());
+
+    // Открываем файл для бинарной записи
+    std::ofstream outFile(outPath, std::ios::binary | std::ios::out);
+    if (!outFile.is_open()) {
+        LOGE("Failed to open output file for writing.");
+        return;
+    }
+
+    // Записываем данные из памяти в файл
+    outFile.write(reinterpret_cast<const char*>(moduleInfo.base), moduleInfo.size);
+
+    if (outFile.good()) {
+        LOGI("Binary dump successful!");
+    } else {
+        LOGE("An error occurred while writing the binary dump.");
+    }
+
+    outFile.close();
+}
+
 void il2cpp_api_init(void *handle) {
     LOGI("il2cpp_handle: %p", handle);
     init_il2cpp_api(handle);
@@ -344,7 +420,9 @@ void il2cpp_api_init(void *handle) {
 }
 
 void il2cpp_dump(const char *outDir) {
-    LOGI("dumping...");
+    LOGI("dumping binary file...");
+    dump_memory_to_file(outDir);
+    LOGI("dumping else...");
     size_t size;
     auto domain = il2cpp_domain_get();
     auto assemblies = il2cpp_domain_get_assemblies(domain, &size);
