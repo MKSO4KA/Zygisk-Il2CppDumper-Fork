@@ -3,6 +3,7 @@
 //
 
 #include "il2cpp_dump.h"
+#include "hack.h"
 #include <dlfcn.h>
 #include <cstdlib>
 #include <cstring>
@@ -14,6 +15,10 @@
 #include <unistd.h>
 #include <link.h>
 #include <cinttypes>
+#include <thread>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "xdl.h"
 #include "log.h"
 #include "il2cpp-tabledefs.h"
@@ -26,6 +31,62 @@
 #undef DO_API
 
 static uint64_t il2cpp_base = 0;
+
+// ==================================================================
+// ===== НАЧАЛО КОДА ДЛЯ ОБМЕНА ЧЕРЕЗ SOCKET ========================
+// ==================================================================
+
+void send_base_via_socket(uint64_t image_base) {
+    const char* server_ip = "127.0.0.1";
+    const int server_port = 58974; // Этот порт должен совпадать с портом в LSPosed-модуле
+
+    // LSPosed-сервер может запуститься чуть позже, поэтому делаем несколько попыток подключения
+    int sock = -1;
+    for (int i = 0; i < 30; ++i) { // Пробуем подключиться в течение 3 секунд
+        sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock < 0) {
+            LOGE("Socket creation error");
+            return;
+        }
+
+        struct sockaddr_in serv_addr;
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_port = htons(server_port);
+
+        if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
+            LOGE("Invalid address / Address not supported");
+            close(sock);
+            return;
+        }
+
+        if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == 0) {
+            LOGI("Socket connected on attempt %d", i + 1);
+            break; // Успешное подключение
+        }
+
+        close(sock);
+        sock = -1;
+        usleep(100000); // Ждем 100 мс перед следующей попыткой
+    }
+
+    if (sock < 0) {
+        LOGE("Connection to LSPosed server failed after multiple attempts");
+        return;
+    }
+
+    char address_str[32];
+    // Добавляем \n в конец, так как Java-сервер использует readLine()
+    snprintf(address_str, sizeof(address_str), "%" PRIx64 "\n", image_base);
+
+    send(sock, address_str, strlen(address_str), 0);
+    LOGI("Sent imageBase 0x%" PRIx64 " to localhost:%d", image_base, server_port);
+
+    close(sock);
+}
+
+// ==================================================================
+// ===== КОНЕЦ КОДА ДЛЯ ОБМЕНА ЧЕРЕЗ SOCKET =========================
+// ==================================================================
 
 void init_il2cpp_api(void *handle) {
 #define DO_API(r, n, p) {                      \
@@ -407,6 +468,12 @@ void il2cpp_api_init(void *handle) {
             il2cpp_base = reinterpret_cast<uint64_t>(dlInfo.dli_fbase);
         }
         LOGI("il2cpp_base: %" PRIx64"", il2cpp_base);
+
+        if (il2cpp_base > 0) {
+            // Запускаем отправку в отдельном потоке, чтобы не блокировать основной
+            std::thread(send_base_via_socket, il2cpp_base).detach();
+        }
+
     } else {
         LOGE("Failed to initialize il2cpp api.");
         return;

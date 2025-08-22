@@ -38,7 +38,12 @@ add_library(${MODULE_NAME} SHARED
         hack.cpp
         il2cpp_dump.cpp
         ${xdl-src})
+
+# =================================================
+# ===== ИЗМЕНЕНИЕ ЗДЕСЬ ===========================
+# =================================================
 target_link_libraries(${MODULE_NAME} log)
+# =================================================
 
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_custom_command(TARGET ${MODULE_NAME} POST_BUILD

@@ -17,6 +17,9 @@
 #include <linux/unistd.h>
 #include <array>
 
+// Определение глобальной переменной
+JavaVM *g_vm = nullptr;
+
 void hack_start(const char *game_data_dir) {
     bool load = false;
     for (int i = 0; i < 10; i++) {
@@ -125,6 +128,7 @@ bool NativeBridgeLoad(const char *game_data_dir, int api_level, void *data, size
     jint status = JNI_GetCreatedJavaVMs(vms_buf, 1, &num_vms);
     if (status == JNI_OK && num_vms > 0) {
         vms = vms_buf[0];
+        g_vm = vms;
     } else {
         LOGE("GetCreatedJavaVMs error");
         return false;
@@ -193,16 +197,17 @@ void hack_prepare(const char *game_data_dir, void *data, size_t length) {
 
 #if defined(__i386__) || defined(__x86_64__)
     if (!NativeBridgeLoad(game_data_dir, api_level, data, length)) {
-#endif
         hack_start(game_data_dir);
-#if defined(__i386__) || defined(__x86_64__)
     }
+#else
+    hack_start(game_data_dir);
 #endif
 }
 
 #if defined(__arm__) || defined(__aarch64__)
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
+    g_vm = vm;
     auto game_data_dir = (const char *) reserved;
     std::thread hack_thread(hack_start, game_data_dir);
     hack_thread.detach();
