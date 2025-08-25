@@ -13,7 +13,7 @@ buildscript {
     }
     dependencies {
         // Обновляем плагин до версии, совместимой с Gradle 8.x
-        classpath 'com.android.tools.build:gradle:8.4.1'
+        classpath 'com.android.tools.build:gradle:7.4.2'
     }
 }
 
