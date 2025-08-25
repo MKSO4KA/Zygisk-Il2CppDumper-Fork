@@ -4,27 +4,28 @@
 #include "il2cpp-class.h"
 
 /**
- * Класс для установки хуков на методы действий игрока.
+ * Класс для установки универсальных логирующих хуков на методы кнопок.
  */
 class HookManager {
 public:
     /**
-     * Находит классы RGController и NormalMechaController и устанавливает хуки.
+     * Ищет во всех сборках методы, содержащие "Button", и устанавливает на них хуки.
      */
-    static void install_player_action_hooks();
+    static void install_button_hooks();
 
 private:
-    // --- Хуки для RGController (обычный игрок) ---
-    static void (*original_BtnAtkClick)(void* instance, bool value);
-    static void (*original_BtnSkillDown)(void* instance);
-    static void hook_BtnAtkClick(void* instance, bool value);
-    static void hook_BtnSkillDown(void* instance);
-
-    // --- Хуки для NormalMechaController (мех) ---
-    static void (*original_MannualAttackButtonDown)(void* instance, bool value);
-    static void (*original_SkillButtonDown)(void* instance);
-    static void hook_MannualAttackButtonDown(void* instance, bool value);
-    static void hook_SkillButtonDown(void* instance);
+    // --- Универсальные заглушки-логгеры ---
+    static void button_hook_stub_0(void* instance);
+    static void button_hook_stub_1(void* instance, void* p1);
+    static void button_hook_stub_2(void* instance, void* p1, void* p2);
+    static void button_hook_stub_3(void* instance, void* p1, void* p2, void* p3);
+    static void button_hook_stub_4(void* instance, void* p1, void* p2, void* p3, void* p4);
+    static void button_hook_stub_5(void* instance, void* p1, void* p2, void* p3, void* p4, void* p5);
+    static void button_hook_stub_6(void* instance, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6);
+    static void button_hook_stub_7(void* instance, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7);
+    static void button_hook_stub_8(void* instance, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7, void* p8);
+    static void button_hook_stub_9(void* instance, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7, void* p8, void* p9);
+    static void button_hook_stub_10(void* instance, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7, void* p8, void* p9, void* p10);
 };
 
 #endif //ZYGISK_IL2CPPDUMPER_HOOKMANAGER_H

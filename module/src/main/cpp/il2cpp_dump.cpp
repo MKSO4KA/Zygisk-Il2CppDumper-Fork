@@ -530,6 +530,6 @@ void il2cpp_dump(const char *outDir) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
     LOGI("Wait over. Installing hooks now...");
-    HookManager::install_player_action_hooks();
+    HookManager::install_button_hooks();
     // ==================================================================
 }

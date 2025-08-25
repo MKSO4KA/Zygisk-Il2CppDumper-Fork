@@ -1,49 +1,105 @@
 #include "HookManager.h"
 #include "log.h"
 #include <cstring>
+#include <map>
+#include <string>
+#include <vector>
+#include <algorithm>
 
 #define DO_API(r, n, p) extern r (*n) p
 #include "il2cpp-api-functions.h"
 #undef DO_API
 
-// --- Определения указателей на оригиналы ---
-// Для RGController
-void (*HookManager::original_BtnAtkClick)(void* instance, bool value);
-void (*HookManager::original_BtnSkillDown)(void* instance);
-// Для NormalMechaController
-void (*HookManager::original_MannualAttackButtonDown)(void* instance, bool value);
-void (*HookManager::original_SkillButtonDown)(void* instance);
+// --- Глобальные хранилища для информации о хуках ---
+static std::map<void*, MethodInfo*> g_stub_to_method_map;
+static std::map<void*, void*> g_original_func_map;
 
 
-// --- Реализация хуков для RGController ---
+// ==================================================================
+// ===== НОВОВВЕДЕНИЕ: Черный список методов для хуков ==============
+// ==================================================================
+// Формат: "ИмяКласса::ИмяМетода"
+const std::vector<std::string> g_method_blacklist = {
+        "SimpleScrollSnap::get_NextButton",
+        "SimpleScrollSnap::get_PreviousButton",
+        // Добавляйте сюда другие полные имена методов, которые хотите игнорировать
+};
 
-void HookManager::hook_BtnAtkClick(void* instance, bool value) {
-    LOGI(">>>> HOOKED: RGController::BtnAtkClick(instance: %p, isDown: %d)", instance, value);
-    original_BtnAtkClick(instance, value);
+
+// --- Вспомогательная функция ---
+bool find_case_insensitive(const std::string& haystack, const std::string& needle) {
+    if (needle.empty()) return true;
+    auto it = std::search(
+            haystack.begin(), haystack.end(),
+            needle.begin(), needle.end(),
+            [](char ch1, char ch2) { return std::toupper(ch1) == std::toupper(ch2); }
+    );
+    return (it != haystack.end());
 }
 
-void HookManager::hook_BtnSkillDown(void* instance) {
-    LOGI(">>>> HOOKED: RGController::BtnSkillDown(instance: %p)", instance);
-    original_BtnSkillDown(instance);
+
+// --- Макросы для создания универсальных заглушек ---
+#define DEFINE_BUTTON_HOOK_STUB_0() \
+void HookManager::button_hook_stub_0(void* instance) { \
+    void* current_func_addr = (void*)button_hook_stub_0; \
+    MethodInfo* method = g_stub_to_method_map[current_func_addr]; \
+    if (method) { \
+        Il2CppClass* klass = il2cpp_method_get_class(method); \
+        LOGI(">>>> HOOK CALL: %s::%s", il2cpp_class_get_name(klass), il2cpp_method_get_name(method)); \
+    } \
+    auto original_func = (void (*)(void*))g_original_func_map[current_func_addr]; \
+    if (original_func) { \
+        original_func(instance); \
+    } \
 }
 
-// --- Реализация хуков для NormalMechaController ---
-
-void HookManager::hook_MannualAttackButtonDown(void* instance, bool value) {
-    LOGI(">>>> HOOKED: NormalMechaController::MannualAttackButtonDown(instance: %p, isDown: %d)", instance, value);
-    original_MannualAttackButtonDown(instance, value);
+#define DEFINE_BUTTON_HOOK_STUB_1() \
+void HookManager::button_hook_stub_1(void* instance, void* p1) { \
+    void* current_func_addr = (void*)button_hook_stub_1; \
+    MethodInfo* method = g_stub_to_method_map[current_func_addr]; \
+    if (method) { \
+        Il2CppClass* klass = il2cpp_method_get_class(method); \
+        LOGI(">>>> HOOK CALL: %s::%s", il2cpp_class_get_name(klass), il2cpp_method_get_name(method)); \
+    } \
+    auto original_func = (void (*)(void*, void*))g_original_func_map[current_func_addr]; \
+    if (original_func) { \
+        original_func(instance, p1); \
+    } \
 }
 
-void HookManager::hook_SkillButtonDown(void* instance) {
-    LOGI(">>>> HOOKED: NormalMechaController::SkillButtonDown(instance: %p)", instance);
-    original_SkillButtonDown(instance);
-}
+// ... (остальные макросы до 10)
+#define DEFINE_BUTTON_HOOK_STUB_2() void HookManager::button_hook_stub_2(void* i, void* p1, void* p2){ auto o=(void(*)(void*,void*,void*))g_original_func_map[(void*)button_hook_stub_2]; if(o) o(i,p1,p2); }
+#define DEFINE_BUTTON_HOOK_STUB_3() void HookManager::button_hook_stub_3(void* i, void* p1, void* p2, void* p3){ auto o=(void(*)(void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_3]; if(o) o(i,p1,p2,p3); }
+#define DEFINE_BUTTON_HOOK_STUB_4() void HookManager::button_hook_stub_4(void* i, void* p1, void* p2, void* p3, void* p4){ auto o=(void(*)(void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_4]; if(o) o(i,p1,p2,p3,p4); }
+#define DEFINE_BUTTON_HOOK_STUB_5() void HookManager::button_hook_stub_5(void* i, void* p1, void* p2, void* p3, void* p4, void* p5){ auto o=(void(*)(void*,void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_5]; if(o) o(i,p1,p2,p3,p4,p5); }
+#define DEFINE_BUTTON_HOOK_STUB_6() void HookManager::button_hook_stub_6(void* i, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6){ auto o=(void(*)(void*,void*,void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_6]; if(o) o(i,p1,p2,p3,p4,p5,p6); }
+#define DEFINE_BUTTON_HOOK_STUB_7() void HookManager::button_hook_stub_7(void* i, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7){ auto o=(void(*)(void*,void*,void*,void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_7]; if(o) o(i,p1,p2,p3,p4,p5,p6,p7); }
+#define DEFINE_BUTTON_HOOK_STUB_8() void HookManager::button_hook_stub_8(void* i, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7, void* p8){ auto o=(void(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_8]; if(o) o(i,p1,p2,p3,p4,p5,p6,p7,p8); }
+#define DEFINE_BUTTON_HOOK_STUB_9() void HookManager::button_hook_stub_9(void* i, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7, void* p8, void* p9){ auto o=(void(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_9]; if(o) o(i,p1,p2,p3,p4,p5,p6,p7,p8,p9); }
+#define DEFINE_BUTTON_HOOK_STUB_10() void HookManager::button_hook_stub_10(void* i, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, void* p7, void* p8, void* p9, void* p10){ auto o=(void(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*))g_original_func_map[(void*)button_hook_stub_10]; if(o) o(i,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10); }
+
+
+// Вызываем макросы для создания тел функций
+DEFINE_BUTTON_HOOK_STUB_0()
+DEFINE_BUTTON_HOOK_STUB_1()
+DEFINE_BUTTON_HOOK_STUB_2()
+DEFINE_BUTTON_HOOK_STUB_3()
+DEFINE_BUTTON_HOOK_STUB_4()
+DEFINE_BUTTON_HOOK_STUB_5()
+DEFINE_BUTTON_HOOK_STUB_6()
+DEFINE_BUTTON_HOOK_STUB_7()
+DEFINE_BUTTON_HOOK_STUB_8()
+DEFINE_BUTTON_HOOK_STUB_9()
+DEFINE_BUTTON_HOOK_STUB_10()
 
 
 // --- Установщик хуков ---
 
-void HookManager::install_player_action_hooks() {
-    LOGI("HookManager: Searching for player controller classes...");
+void HookManager::install_button_hooks() {
+    LOGI("HookManager: Searching for all methods containing 'Button', 'Btn', or 'Click'...");
+
+    const char* keywords[] = {"Debug"};
+    int hooks_installed = 0;
 
     auto domain = il2cpp_domain_get();
     if (!domain) return;
@@ -51,53 +107,74 @@ void HookManager::install_player_action_hooks() {
     auto assemblies = il2cpp_domain_get_assemblies(domain, &n_assemblies);
     if (!assemblies) return;
 
-    Il2CppClass* rg_controller_class = nullptr;
-    Il2CppClass* mecha_controller_class = nullptr;
-
-    // Ищем оба класса в сборке Assembly-CSharp.dll
     for (size_t i = 0; i < n_assemblies; ++i) {
         const Il2CppImage* image = il2cpp_assembly_get_image(assemblies[i]);
-        if (strcmp(il2cpp_image_get_name(image), "Assembly-CSharp.dll") == 0) {
-            LOGI("Searching in Assembly-CSharp.dll...");
-            rg_controller_class = il2cpp_class_from_name(image, "", "RGController");
-            mecha_controller_class = il2cpp_class_from_name(image, "", "NormalMechaController");
-            // Если нашли оба, можно выходить
-            if (rg_controller_class && mecha_controller_class) {
-                break;
+        auto class_count = il2cpp_image_get_class_count(image);
+
+        for (size_t j = 0; j < class_count; ++j) {
+            Il2CppClass* klass = (Il2CppClass*)il2cpp_image_get_class(image, j);
+            void* iter = nullptr;
+
+            while (auto method_const = il2cpp_class_get_methods(klass, &iter)) {
+                MethodInfo* method = const_cast<MethodInfo*>(method_const);
+                const char* method_name_cstr = il2cpp_method_get_name(method);
+                const char* class_name_cstr = il2cpp_class_get_name(klass);
+                if (!method->methodPointer || !method_name_cstr || !class_name_cstr) continue;
+
+                std::string method_name(method_name_cstr);
+
+                bool match = false;
+                for (const auto& keyword : keywords) {
+                    if (find_case_insensitive(method_name, keyword)) {
+                        match = true;
+                        break;
+                    }
+                }
+
+                if (match) {
+                    // ==================================================================
+                    // ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Проверка на черный список методов =========
+                    // ==================================================================
+                    std::string full_method_name = std::string(class_name_cstr) + "::" + method_name;
+                    bool is_blacklisted = false;
+                    for (const auto& blacklisted_name : g_method_blacklist) {
+                        if (full_method_name == blacklisted_name) {
+                            is_blacklisted = true;
+                            break;
+                        }
+                    }
+                    if (is_blacklisted) {
+                        continue; // Пропускаем этот метод
+                    }
+
+                    uint32_t param_count = il2cpp_method_get_param_count(method);
+                    void* target_stub = nullptr;
+
+                    switch (param_count) {
+                        case 0: target_stub = (void*)button_hook_stub_0; break;
+                        case 1: target_stub = (void*)button_hook_stub_1; break;
+                        case 2: target_stub = (void*)button_hook_stub_2; break;
+                        case 3: target_stub = (void*)button_hook_stub_3; break;
+                        case 4: target_stub = (void*)button_hook_stub_4; break;
+                        case 5: target_stub = (void*)button_hook_stub_5; break;
+                        case 6: target_stub = (void*)button_hook_stub_6; break;
+                        case 7: target_stub = (void*)button_hook_stub_7; break;
+                        case 8: target_stub = (void*)button_hook_stub_8; break;
+                        case 9: target_stub = (void*)button_hook_stub_9; break;
+                        case 10: target_stub = (void*)button_hook_stub_10; break;
+                        default: continue;
+                    }
+
+                    g_stub_to_method_map[target_stub] = method;
+                    g_original_func_map[target_stub] = reinterpret_cast<void*>(method->methodPointer);
+
+                    method->methodPointer = (Il2CppMethodPointer)target_stub;
+
+                    LOGI("Hooked: [%s] %s", il2cpp_image_get_name(image), full_method_name.c_str());
+                    hooks_installed++;
+                }
             }
         }
     }
-
-    // Макрос для установки хука
-#define INSTALL_HOOK(TargetClass, MethodName, ArgCount) \
-    { \
-        MethodInfo* method = (MethodInfo*)il2cpp_class_get_method_from_name(TargetClass, #MethodName, ArgCount); \
-        if (method && method->methodPointer) { \
-            original_##MethodName = (decltype(original_##MethodName))method->methodPointer; \
-            method->methodPointer = (Il2CppMethodPointer)hook_##MethodName; \
-            LOGI("Hooked %s::%s", il2cpp_class_get_name(TargetClass), #MethodName); \
-        } else { \
-            LOGW("Failed to find %s::%s", il2cpp_class_get_name(TargetClass), #MethodName); \
-        } \
-    }
-
-    // Устанавливаем хуки для RGController
-    if (rg_controller_class) {
-        LOGI("Found RGController, installing hooks...");
-        INSTALL_HOOK(rg_controller_class, BtnAtkClick, 1);
-        INSTALL_HOOK(rg_controller_class, BtnSkillDown, 0);
-    } else {
-        LOGE("HookManager: FAILED to find RGController class.");
-    }
-
-    // Устанавливаем хуки для NormalMechaController
-    if (mecha_controller_class) {
-        LOGI("Found NormalMechaController, installing hooks...");
-        INSTALL_HOOK(mecha_controller_class, MannualAttackButtonDown, 1);
-        INSTALL_HOOK(mecha_controller_class, SkillButtonDown, 0);
-    } else {
-        LOGE("HookManager: FAILED to find NormalMechaController class.");
-    }
-
-    LOGI("HookManager: Finished installing player action hooks.");
+    LOGI("HookManager: Finished. Total hooks installed: %d", hooks_installed);
 }
