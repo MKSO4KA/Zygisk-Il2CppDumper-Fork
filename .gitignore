@@ -19,5 +19,5 @@
 
 # Игнорируем автоматически скачиваемые зависимости Dobby
 # Эти папки создаются задачей downloadAndUnzipDependencies в build.gradle
-/src/main/cpp/include/
-/src/main/cpp/libs/
+/module/src/main/cpp/include/
+/module/src/main/cpp/libs/
