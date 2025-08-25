@@ -20,6 +20,8 @@ static std::map<void*, void*> g_original_func_map;
 // ==================================================================
 // Формат: "ИмяКласса::ИмяМетода"
 const std::vector<std::string> g_method_blacklist = {
+        "NetworkRoomPlayer::DrawPlayerReadyButton",
+        "NetworkRoomManager::OnRoomServerAddPlayer",
         "SimpleScrollSnap::get_NextButton",
         "SimpleScrollSnap::get_PreviousButton",
         // Добавляйте сюда другие полные имена методов, которые хотите игнорировать
@@ -98,7 +100,7 @@ DEFINE_BUTTON_HOOK_STUB_10()
 void HookManager::install_button_hooks() {
     LOGI("HookManager: Searching for all methods containing 'Button', 'Btn', or 'Click'...");
 
-    const char* keywords[] = {"Debug"};
+    const char* keywords[] = {"Player"};
     int hooks_installed = 0;
 
     auto domain = il2cpp_domain_get();
