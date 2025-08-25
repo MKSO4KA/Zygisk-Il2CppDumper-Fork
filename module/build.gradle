@@ -132,6 +132,11 @@ afterEvaluate {
 
         task("prepareMagiskFiles${variantCapped}", type: Sync) {
             dependsOn("assemble$variantCapped")
+
+            // ИСПРАВЛЕНИЕ: Эта строка заставит задачу выполняться каждый раз,
+            // игнорируя кэш Gradle, и всегда генерировать свежий module.prop.
+            outputs.upToDateWhen { false }
+
             def templatePath = "$rootDir/template/magisk_module"
             into magiskDir
             from(templatePath) { exclude 'module.prop' }
@@ -176,9 +181,8 @@ afterEvaluate {
             workingDir outDir
             doFirst {
                 def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
-                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["push", zipName, "/data/local/tmp/"]
-                println "Executing command: " + finalCommand.join(" ")
-                commandLine = finalCommand
+                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["push", zipName, "/data/local/tmp/"]
+                println "Executing command: " + commandLine.join(" ")
             }
         }
 
@@ -186,10 +190,9 @@ afterEvaluate {
             dependsOn("push${variantCapped}")
             doFirst {
                 def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
-                def reinstallCommand = "'magisk --remove-module ${magiskModuleId} ; magisk --install-module /data/local/tmp/${zipName}'"
-                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", reinstallCommand]
-                println "Executing command: " + finalCommand.join(" ")
-                commandLine = finalCommand
+                def reinstallCommand = "'magisk --remove-module ${magiskModuleId} 2>/dev/null ; magisk --install-module /data/local/tmp/${zipName}'"
+                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", reinstallCommand]
+                println "Executing command: " + commandLine.join(" ")
             }
         }
 
@@ -197,9 +200,8 @@ afterEvaluate {
             dependsOn("flash${variantCapped}")
             doFirst {
                 def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
-                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", "rm /data/local/tmp/${zipName}"]
-                println "Executing command: " + finalCommand.join(" ")
-                commandLine = finalCommand
+                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", "'rm /data/local/tmp/${zipName}'"]
+                println "Executing command: " + commandLine.join(" ")
             }
             ignoreExitValue = true
         }
@@ -207,9 +209,8 @@ afterEvaluate {
         task("flashAndReboot${variantCapped}", type: Exec) {
             dependsOn("cleanupRemoteZip${variantCapped}")
             doFirst {
-                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "reboot"]
-                println "Executing command: " + finalCommand.join(" ")
-                commandLine = finalCommand
+                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "reboot"]
+                println "Executing command: " + commandLine.join(" ")
             }
             ignoreExitValue = true
         }
