@@ -27,22 +27,37 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_FLAGS} ${CXX_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LINKER_FLAGS}")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LINKER_FLAGS}")
 
+# =================================================
+# ===== НАЧАЛО ИЗМЕНЕНИЙ ==========================
+# =================================================
+
+# 1. Добавляем пути к заголовочным файлам (включая dobby.h)
 include_directories(
         xdl/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# 2. Определяем статическую библиотеку Dobby
+add_library(dobby STATIC IMPORTED)
+set_target_properties(dobby PROPERTIES IMPORTED_LOCATION
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/${ANDROID_ABI}/libdobby.a)
+
+# 3. Добавляем файлы исходного кода
 aux_source_directory(xdl xdl-src)
 
 add_library(${MODULE_NAME} SHARED
         main.cpp
         hack.cpp
         il2cpp_dump.cpp
+        GodModeHook.cpp # <-- Добавляем новый файл
+        HookManager.cpp
         ${xdl-src})
 
+# 4. Линкуем нашу библиотеку с log и dobby
+target_link_libraries(${MODULE_NAME} log dobby)
+
 # =================================================
-# ===== ИЗМЕНЕНИЕ ЗДЕСЬ ===========================
-# =================================================
-target_link_libraries(${MODULE_NAME} log)
+# ===== КОНЕЦ ИЗМЕНЕНИЙ ===========================
 # =================================================
 
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")

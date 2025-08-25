@@ -1,5 +1,4 @@
 import org.apache.tools.ant.filters.FixCrLfFilter
-
 import java.nio.file.Paths
 import java.nio.file.Files
 
@@ -7,6 +6,12 @@ apply plugin: 'com.android.library'
 apply from: file(rootProject.file('module.gradle'))
 
 android {
+    // ===================================================================
+    // ===== ИСПРАВЛЕНИЕ ЗДЕСЬ ===========================================
+    // ===================================================================
+    namespace 'zygisk.il2cppdumper'
+    // ===================================================================
+
     compileSdkVersion rootProject.ext.targetSdkVersion
     ndkVersion '25.2.9519653'
     defaultConfig {
@@ -105,3 +110,75 @@ afterEvaluate {
         variant.assembleProvider.get().finalizedBy("zip${variantCapped}")
     }
 }
+
+
+// ===================================================================
+// ===== НАЧАЛО: Скрипт для скачивания Dobby и других зависимостей =====
+// ===================================================================
+
+// 1. Секция для конфигурации
+ext {
+    // URL вашего архива с зависимостями. Он тот же самый.
+    depsUrl = "https://github.com/MKSO4KA/LsPosedBaseBridge/releases/download/v1.0.0-libs/lsBaseBridge-mod-deps-v1.0.zip.zip"
+
+    // Определяем пути. Они немного отличаются от LSPosed-проекта,
+    // так как мы находимся внутри под-модуля 'module'.
+    // '$projectDir' здесь указывает на папку 'Zygisk-Il2CppDumper-Fork/module/'.
+    jniDir = file("$projectDir/src/main/cpp") // <-- Путь к папке с C++ кодом
+    jniIncludeDir = file("$jniDir/include")
+    jniLibsDir = file("$jniDir/libs")
+
+    // Временный файл для скачивания
+    depsZip = file("$buildDir/tmp/dependencies.zip")
+}
+
+// 2. Задача для скачивания и распаковки
+task downloadAndUnzipDependencies {
+    description "Downloads and unzips all prebuilt JNI dependencies (Dobby)."
+    group "build setup"
+
+    // Gradle будет проверять наличие этих папок, чтобы не выполнять задачу повторно
+    outputs.dir(jniIncludeDir)
+    outputs.dir(jniLibsDir)
+
+    doLast {
+        println "Downloading JNI dependencies from ${depsUrl}..."
+        depsZip.getParentFile().mkdirs()
+
+        // Используем ant для скачивания
+        ant.get(src: depsUrl, dest: depsZip)
+
+        println "Download complete. Unzipping dependencies..."
+
+        // --- Распаковка заголовочных файлов (.h) ---
+        // Цель: /module/src/main/cpp/include/dobby.h
+        copy {
+            from zipTree(depsZip)
+            include 'include/**' // Берем из архива папку 'include'
+            into jniDir         // Копируем в /module/src/main/cpp/
+            // Gradle сам создаст папку 'include' внутри.
+        }
+
+        // --- Распаковка нативных библиотек (.a) ---
+        // Цель: /module/src/main/cpp/libs/[архитектура]/libdobby.a
+        copy {
+            from zipTree(depsZip)
+            include 'libs/**'    // Берем из архива папку 'libs'
+            into jniDir          // Копируем в /module/src/main/cpp/
+        }
+
+        println "Cleaning up temporary zip file..."
+        depsZip.delete()
+    }
+}
+
+// 3. "Привязка" к сборке
+// Мы хотим, чтобы наша задача выполнялась перед тем, как CMake начнет свою работу.
+// 'preBuild' - идеальный кандидат.
+tasks.named("preBuild").configure {
+    dependsOn downloadAndUnzipDependencies
+}
+
+// ===================================================================
+// ===== КОНЕЦ: Скрипт для скачивания Dobby и других зависимостей =====
+// ===================================================================

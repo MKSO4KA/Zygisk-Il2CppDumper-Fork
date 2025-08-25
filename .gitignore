@@ -12,3 +12,12 @@
 /out
 .externalNativeBuild
 .cxx
+
+/.externalNativeBuild
+/build
+/release
+
+# Игнорируем автоматически скачиваемые зависимости Dobby
+# Эти папки создаются задачей downloadAndUnzipDependencies в build.gradle
+/src/main/cpp/include/
+/src/main/cpp/libs/

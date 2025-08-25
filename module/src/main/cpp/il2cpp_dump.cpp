@@ -23,12 +23,22 @@
 #include "log.h"
 #include "il2cpp-tabledefs.h"
 #include "il2cpp-class.h"
+#include "GodModeHook.h" // <-- ДОБАВИТЬ ЭТУ СТРОКУ
+
 
 #define DO_API(r, n, p) r (*n) p
 
 #include "il2cpp-api-functions.h"
 
 #undef DO_API
+
+void initialize_hooks(uint64_t il2cpp_base) {
+    LOGI("Initializing all hooks...");
+    GodModeHook::install(il2cpp_base);
+    // Если в будущем появится новый хук, например, "UnlimitedManaHook",
+    // вы просто добавите сюда одну строку:
+    // UnlimitedManaHook::install(il2cpp_base);
+}
 
 static uint64_t il2cpp_base = 0;
 
@@ -470,6 +480,8 @@ void il2cpp_api_init(void *handle) {
         LOGI("il2cpp_base: %" PRIx64"", il2cpp_base);
 
         if (il2cpp_base > 0) {
+            //hoook
+            initialize_hooks(il2cpp_base);
             // Запускаем отправку в отдельном потоке, чтобы не блокировать основной
             std::thread(send_base_via_socket, il2cpp_base).detach();
         }
