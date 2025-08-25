@@ -530,17 +530,19 @@ void il2cpp_dump(const char *outDir) {
     // Приостанавливаем текущий (фоновый) поток на 5 секунд
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
+    LOGI("Il2CppDumper tasks finished. Fetching dynamic config before installing hooks...");
+
     DynamicConfig config = ConfigFetcher::fetch();
 
     if (config.fetch_successful) {
         LOGI("Using dynamically fetched config to install hooks.");
-        HookManager::install_hooks(config.keywords, config.blacklist, config.class_blacklist, config.dll_blacklist); // <-- ДОБАВЛЕН ПАРАМЕТР
+        HookManager::install_hooks(config); // <-- ИЗМЕНЕНО
     } else {
         LOGW("Failed to fetch dynamic config. Installing hooks with default hardcoded values.");
-        std::vector<std::string> default_keywords = {"Player"};
-        std::vector<std::string> default_method_blacklist;
-        std::vector<std::string> default_class_blacklist;
-        std::vector<std::string> default_dll_blacklist = { "mscorlib.dll", "System.dll" }; // <-- ДОБАВЛЕНО
-        HookManager::install_hooks(default_keywords, default_method_blacklist, default_class_blacklist, default_dll_blacklist); // <-- ДОБАВЛЕН ПАРАМЕТР
+        DynamicConfig defaultConfig;
+        defaultConfig.keywords = {"Player"};
+        defaultConfig.dll_blacklist = { "mscorlib.dll", "System.dll" };
+        defaultConfig.enable_hook_call_logging = false; // Логи вызовов выключены по умолчанию
+        HookManager::install_hooks(defaultConfig); // <-- ИЗМЕНЕНО
     }
 }

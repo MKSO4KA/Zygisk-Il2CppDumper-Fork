@@ -77,17 +77,17 @@ DynamicConfig ConfigFetcher::fetch() {
     }
 
     // Проверяем наличие ключей перед доступом
-    if (j.contains("keywords") && j.contains("blacklist") && j.contains("class_blacklist") && j.contains("dll_blacklist")) { // <-- ДОБАВЛЕНО УСЛОВИЕ
+    if (j.contains("keywords") && j.contains("blacklist") && j.contains("class_blacklist") && j.contains("dll_blacklist") && j.contains("enable_hook_call_logging")) { // <-- ДОБАВЛЕНО УСЛОВИЕ
         config.keywords = j["keywords"].get<std::vector<std::string>>();
         config.blacklist = j["blacklist"].get<std::vector<std::string>>();
         config.class_blacklist = j["class_blacklist"].get<std::vector<std::string>>();
-        config.dll_blacklist = j["dll_blacklist"].get<std::vector<std::string>>(); // <-- ДОБАВЛЕНО
+        config.dll_blacklist = j["dll_blacklist"].get<std::vector<std::string>>();
+        config.enable_hook_call_logging = j["enable_hook_call_logging"].get<bool>(); // <-- ДОБАВЛЕНО
         config.fetch_successful = true;
         LOGI("ConfigFetcher: Successfully fetched and parsed config.");
-        LOGI("Keywords: %zu, Method Blacklist: %zu, Class Blacklist: %zu, DLL Blacklist: %zu", // <-- ОБНОВЛЕН ЛОГ
-             config.keywords.size(), config.blacklist.size(), config.class_blacklist.size(), config.dll_blacklist.size());
+        LOGI("... Hook call logging is %s", config.enable_hook_call_logging ? "ENABLED" : "DISABLED"); // <-- ДОБАВЛЕН ЛОГ
     } else {
-        LOGE("ConfigFetcher: JSON does not contain required keys ('keywords', 'blacklist', 'class_blacklist', 'dll_blacklist')."); // <-- ОБНОВЛЕН ЛОГ
+        LOGE("ConfigFetcher: JSON does not contain all required keys.");
     }
 
     return config;

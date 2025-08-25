@@ -8,7 +8,8 @@ struct DynamicConfig {
     std::vector<std::string> keywords;
     std::vector<std::string> blacklist;
     std::vector<std::string> class_blacklist;
-    std::vector<std::string> dll_blacklist; // <-- ДОБАВЛЕНО
+    std::vector<std::string> dll_blacklist;
+    bool enable_hook_call_logging = false; // <-- ДОБАВЛЕНО (безопасное значение по умолчанию)
     bool fetch_successful = false;
 };
 
