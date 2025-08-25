@@ -24,6 +24,7 @@
 #include "il2cpp-tabledefs.h"
 #include "il2cpp-class.h"
 #include "HookManager.h" // <-- ПОДКЛЮЧАЕМ НАШ МЕНЕДЖЕР
+#include "ConfigFetcher.h" // <-- ПОДКЛЮЧАЕМ НАШ ФЕТЧЕР
 
 #define DO_API(r, n, p) r (*n) p
 
@@ -529,7 +530,17 @@ void il2cpp_dump(const char *outDir) {
     // Приостанавливаем текущий (фоновый) поток на 5 секунд
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    LOGI("Wait over. Installing hooks now...");
-    HookManager::install_button_hooks();
-    // ==================================================================
+    DynamicConfig config = ConfigFetcher::fetch();
+
+    if (config.fetch_successful) {
+        LOGI("Using dynamically fetched config to install hooks.");
+        HookManager::install_hooks(config.keywords, config.blacklist, config.class_blacklist, config.dll_blacklist); // <-- ДОБАВЛЕН ПАРАМЕТР
+    } else {
+        LOGW("Failed to fetch dynamic config. Installing hooks with default hardcoded values.");
+        std::vector<std::string> default_keywords = {"Player"};
+        std::vector<std::string> default_method_blacklist;
+        std::vector<std::string> default_class_blacklist;
+        std::vector<std::string> default_dll_blacklist = { "mscorlib.dll", "System.dll" }; // <-- ДОБАВЛЕНО
+        HookManager::install_hooks(default_keywords, default_method_blacklist, default_class_blacklist, default_dll_blacklist); // <-- ДОБАВЛЕН ПАРАМЕТР
+    }
 }

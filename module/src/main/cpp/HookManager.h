@@ -2,16 +2,25 @@
 #define ZYGISK_IL2CPPDUMPER_HOOKMANAGER_H
 
 #include "il2cpp-class.h"
+#include <vector> // <-- ДОБАВЛЕНО
+#include <string> // <-- ДОБАВЛЕНО
 
 /**
- * Класс для установки универсальных логирующих хуков на методы кнопок.
+ * Класс для установки универсальных логирующих хуков на методы.
  */
 class HookManager {
 public:
     /**
-     * Ищет во всех сборках методы, содержащие "Button", и устанавливает на них хуки.
+     * Ищет во всех сборках методы и устанавливает на них хуки.
+     * @param keywords Список ключевых слов для поиска в именах методов.
+     * @param method_blacklist Список полных имен методов для исключения.
+     * @param class_blacklist Список имен классов для полного исключения.
+     * @param dll_blacklist Список имен DLL (образов) для полного исключения.
      */
-    static void install_button_hooks();
+    static void install_hooks(const std::vector<std::string>& keywords,
+                              const std::vector<std::string>& method_blacklist,
+                              const std::vector<std::string>& class_blacklist,
+                              const std::vector<std::string>& dll_blacklist); // <-- ДОБАВЛЕНО
 
 private:
     // --- Универсальные заглушки-логгеры ---

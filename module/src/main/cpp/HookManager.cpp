@@ -19,13 +19,6 @@ static std::map<void*, void*> g_original_func_map;
 // ===== НОВОВВЕДЕНИЕ: Черный список методов для хуков ==============
 // ==================================================================
 // Формат: "ИмяКласса::ИмяМетода"
-const std::vector<std::string> g_method_blacklist = {
-        "NetworkRoomPlayer::DrawPlayerReadyButton",
-        "NetworkRoomManager::OnRoomServerAddPlayer",
-        "SimpleScrollSnap::get_NextButton",
-        "SimpleScrollSnap::get_PreviousButton",
-        // Добавляйте сюда другие полные имена методов, которые хотите игнорировать
-};
 
 
 // --- Вспомогательная функция ---
@@ -97,10 +90,19 @@ DEFINE_BUTTON_HOOK_STUB_10()
 
 // --- Установщик хуков ---
 
-void HookManager::install_button_hooks() {
-    LOGI("HookManager: Searching for all methods containing 'Button', 'Btn', or 'Click'...");
+void HookManager::install_hooks(const std::vector<std::string>& keywords,
+                                const std::vector<std::string>& method_blacklist,
+                                const std::vector<std::string>& class_blacklist,
+                                const std::vector<std::string>& dll_blacklist) { // <-- ДОБАВЛЕН ПАРАМЕТР
+    LOGI("HookManager: Installing dynamic hooks...");
+    LOGI("HookManager: Using %zu keywords, %zu method blacklist, %zu class blacklist, %zu DLL blacklist.", // <-- ОБНОВЛЕН ЛОГ
+         keywords.size(), method_blacklist.size(), class_blacklist.size(), dll_blacklist.size());
 
-    const char* keywords[] = {"Player"};
+    if (keywords.empty()) {
+        LOGW("HookManager: Keyword list is empty, no hooks will be installed.");
+        return;
+    }
+
     int hooks_installed = 0;
 
     auto domain = il2cpp_domain_get();
@@ -111,17 +113,51 @@ void HookManager::install_button_hooks() {
 
     for (size_t i = 0; i < n_assemblies; ++i) {
         const Il2CppImage* image = il2cpp_assembly_get_image(assemblies[i]);
+
+        // --- НАЧАЛО НОВОЙ ЛОГИКИ (ЧЕРНЫЙ СПИСОК DLL) ---
+        const char* image_name = il2cpp_image_get_name(image);
+        if (!image_name) continue;
+
+        bool is_dll_blacklisted = false;
+        for (const auto& blacklisted_dll_name : dll_blacklist) {
+            if (strcmp(image_name, blacklisted_dll_name.c_str()) == 0) {
+                is_dll_blacklisted = true;
+                break;
+            }
+        }
+        if (is_dll_blacklisted) {
+            continue; // Пропускаем всю DLL
+        }
+        // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
         auto class_count = il2cpp_image_get_class_count(image);
 
-        for (size_t j = 0; j < class_count; ++j) {
+        for (size_t j = 0; j < class_count; ++j)for (size_t j = 0; j < class_count; ++j) {
             Il2CppClass* klass = (Il2CppClass*)il2cpp_image_get_class(image, j);
             void* iter = nullptr;
+
+            // --- НАЧАЛО НОВОЙ ЛОГИКИ ---
+            // Проверяем, не находится ли сам класс в черном списке
+            const char* class_name_cstr = il2cpp_class_get_name(klass);
+            if (!class_name_cstr) continue;
+
+            bool is_class_blacklisted = false;
+            for (const auto& blacklisted_class_name : class_blacklist) {
+                if (strcmp(class_name_cstr, blacklisted_class_name.c_str()) == 0) {
+                    is_class_blacklisted = true;
+                    break;
+                }
+            }
+            if (is_class_blacklisted) {
+                continue; // Пропускаем все методы этого класса
+            }
+            // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
             while (auto method_const = il2cpp_class_get_methods(klass, &iter)) {
                 MethodInfo* method = const_cast<MethodInfo*>(method_const);
                 const char* method_name_cstr = il2cpp_method_get_name(method);
-                const char* class_name_cstr = il2cpp_class_get_name(klass);
-                if (!method->methodPointer || !method_name_cstr || !class_name_cstr) continue;
+                // class_name_cstr уже получен выше
+                if (!method->methodPointer || !method_name_cstr) continue;
 
                 std::string method_name(method_name_cstr);
 
@@ -132,21 +168,18 @@ void HookManager::install_button_hooks() {
                         break;
                     }
                 }
-
                 if (match) {
-                    // ==================================================================
-                    // ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Проверка на черный список методов =========
-                    // ==================================================================
                     std::string full_method_name = std::string(class_name_cstr) + "::" + method_name;
-                    bool is_blacklisted = false;
-                    for (const auto& blacklisted_name : g_method_blacklist) {
+                    bool is_method_blacklisted = false;
+                    // --- ИЗМЕНЕНИЕ ЗДЕСЬ (имя переменной) ---
+                    for (const auto& blacklisted_name : method_blacklist) {
                         if (full_method_name == blacklisted_name) {
-                            is_blacklisted = true;
+                            is_method_blacklisted = true;
                             break;
                         }
                     }
-                    if (is_blacklisted) {
-                        continue; // Пропускаем этот метод
+                    if (is_method_blacklisted) {
+                        continue;
                     }
 
                     uint32_t param_count = il2cpp_method_get_param_count(method);

@@ -46,6 +46,7 @@ add_library(${MODULE_NAME} SHARED
         hack.cpp
         il2cpp_dump.cpp
         HookManager.cpp # <-- ДОБАВЛЯЕМ НАШ НОВЫЙ ФАЙЛ
+        ConfigFetcher.cpp # <-- ДОБАВЛЯЕМ НАШ НОВЫЙ ФАЙЛ
         ${xdl-src})
 
 # Передача конфигурации в C++
