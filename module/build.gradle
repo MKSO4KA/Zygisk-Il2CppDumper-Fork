@@ -2,7 +2,12 @@ import org.apache.tools.ant.filters.FixCrLfFilter
 import java.nio.file.Paths
 import java.nio.file.Files
 
-apply plugin: 'com.android.library'
+// Используем новый блок plugins для подключения плагина.
+// Это стандарт для современных версий Gradle.
+plugins {
+    id 'com.android.library'
+}
+
 apply from: file(rootProject.file('module.gradle'))
 
 // ===================================================================
@@ -19,13 +24,11 @@ task bumpVersion {
             throw new FileNotFoundException("gradle.properties not found!")
         }
 
-        // Используем java.util.Properties для корректной работы с файлом
         def properties = new Properties()
         propsFile.withInputStream {
             properties.load(it)
         }
 
-        // Читаем, увеличиваем и преобразуем обратно в строку
         def currentPatch = properties.getProperty('VERSION_PATCH', '0').toInteger()
         def currentCode = properties.getProperty('VERSION_CODE', '1').toInteger()
 
@@ -35,19 +38,15 @@ task bumpVersion {
         properties.setProperty('VERSION_PATCH', newPatch.toString())
         properties.setProperty('VERSION_CODE', newCode.toString())
 
-        // Сохраняем изменения
         propsFile.withOutputStream {
             properties.store(it, "Version properties updated by bumpVersion task")
         }
 
-        // Выводим информацию в консоль
         def newVersionName = "v${properties.getProperty('VERSION_MAJOR')}.${properties.getProperty('VERSION_MINOR')}.${newPatch}"
         println "Version bumped to ${newVersionName} (Code ${newCode})"
     }
 }
 
-// Привязываем нашу задачу к стандартным задачам сборки.
-// Теперь перед каждой сборкой версия будет автоматически увеличиваться.
 tasks.named("preBuild").configure {
     dependsOn bumpVersion
 }
@@ -66,11 +65,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         externalNativeBuild {
             cmake {
-                // Преобразуем true/false в 1/0 для C++ препроцессора
                 def configDumpBinary = DUMP_BINARY_ENABLED.toBoolean() ? "1" : "0"
                 def configDumpCs = DUMP_CS_ENABLED.toBoolean() ? "1" : "0"
 
-                // Передаем флаги в CMake
                 arguments "-DMODULE_NAME:STRING=$moduleLibraryName",
                         "-DCONFIG_DUMP_BINARY=${configDumpBinary}",
                         "-DCONFIG_DUMP_CS=${configDumpCs}"
@@ -92,11 +89,6 @@ repositories {
     mavenLocal()
 }
 
-// ===================================================================
-// ===== НАЧАЛО: Функция для "ленивого" чтения properties ==========
-// ===================================================================
-// Эта функция будет читать gradle.properties в момент выполнения,
-// а не на этапе конфигурации, чтобы получить обновленную версию.
 def getModuleProps() {
     def propsFile = rootProject.file('gradle.properties')
     def properties = new Properties()
@@ -112,166 +104,149 @@ def getModuleProps() {
             versionCode: code
     ]
 }
+
 // ===================================================================
-// ===== КОНЕЦ: Функция для "ленивого" чтения properties ===========
+// ===== НАЧАЛО: Новый, совместимый способ создания задач ==========
 // ===================================================================
+// Используем новый Variants API, который заменяет `libraryVariants.forEach`.
+android.libraryVariants.all { variant ->
+    def variantCapped = variant.name.capitalize()
+    def variantLowered = variant.name.toLowerCase()
 
-afterEvaluate {
-    android.libraryVariants.forEach { variant ->
-        def variantCapped = variant.name.capitalize()
-        def variantLowered = variant.name.toLowerCase()
+    def magiskDir = file("$outDir/magisk_module_$variantLowered")
 
-        def magiskDir = file("$outDir/magisk_module_$variantLowered")
-
-        def adbDeviceArgs = provider {
-            if (project.hasProperty('ADB_DEVICE_SERIAL') && !ADB_DEVICE_SERIAL.isEmpty()) {
-                return ['-s', ADB_DEVICE_SERIAL]
-            }
-            return []
+    def adbDeviceArgs = provider {
+        if (project.hasProperty('ADB_DEVICE_SERIAL') && !ADB_DEVICE_SERIAL.isEmpty()) {
+            return ['-s', ADB_DEVICE_SERIAL]
         }
-
-        task("prepareMagiskFiles${variantCapped}", type: Sync) {
-            dependsOn("assemble$variantCapped")
-
-            // ИСПРАВЛЕНИЕ: Эта строка заставит задачу выполняться каждый раз,
-            // игнорируя кэш Gradle, и всегда генерировать свежий module.prop.
-            outputs.upToDateWhen { false }
-
-            def templatePath = "$rootDir/template/magisk_module"
-            into magiskDir
-            from(templatePath) { exclude 'module.prop' }
-            from(templatePath) {
-                include 'module.prop'
-                def props = getModuleProps()
-                expand([
-                        id         : magiskModuleId,
-                        name       : moduleName,
-                        version    : props.versionName,
-                        versionCode: props.versionCode,
-                        author     : moduleAuthor,
-                        description: moduleDescription,
-                ])
-                filter(FixCrLfFilter.class, eol: FixCrLfFilter.CrLf.newInstance("lf"))
-            }
-            from("$buildDir/intermediates/stripped_native_libs/$variantLowered/out/lib") { into 'lib' }
-            doLast {
-                file("$magiskDir/zygisk").mkdir()
-                fileTree("$magiskDir/lib").visit { f ->
-                    if (!f.directory) return
-                    def srcPath = Paths.get("${f.file.absolutePath}/lib${moduleLibraryName}.so")
-                    def dstPath = Paths.get("$magiskDir/zygisk/${f.path}.so")
-                    Files.move(srcPath, dstPath)
-                }
-                new File("$magiskDir/lib").deleteDir()
-            }
-        }
-
-        task("zip${variantCapped}", type: Zip) {
-            dependsOn("prepareMagiskFiles${variantCapped}")
-            from magiskDir
-            archiveFileName.set(provider {
-                def props = getModuleProps()
-                "${magiskModuleId.replace('_', '-')}-${props.versionName}-${variantLowered}.zip"
-            })
-            destinationDirectory.set(outDir)
-        }
-
-        task("push${variantCapped}", type: Exec) {
-            dependsOn("zip${variantCapped}")
-            workingDir outDir
-            doFirst {
-                def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
-                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["push", zipName, "/data/local/tmp/"]
-                println "Executing command: " + commandLine.join(" ")
-            }
-        }
-
-        task("flash${variantCapped}", type: Exec) {
-            dependsOn("push${variantCapped}")
-            doFirst {
-                def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
-                def reinstallCommand = "'magisk --remove-module ${magiskModuleId} 2>/dev/null ; magisk --install-module /data/local/tmp/${zipName}'"
-                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", reinstallCommand]
-                println "Executing command: " + commandLine.join(" ")
-            }
-        }
-
-        task("cleanupRemoteZip${variantCapped}", type: Exec) {
-            dependsOn("flash${variantCapped}")
-            doFirst {
-                def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
-                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", "'rm /data/local/tmp/${zipName}'"]
-                println "Executing command: " + commandLine.join(" ")
-            }
-            ignoreExitValue = true
-        }
-
-        task("flashAndReboot${variantCapped}", type: Exec) {
-            dependsOn("cleanupRemoteZip${variantCapped}")
-            doFirst {
-                commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "reboot"]
-                println "Executing command: " + commandLine.join(" ")
-            }
-            ignoreExitValue = true
-        }
-
-        variant.assembleProvider.get().finalizedBy("zip${variantCapped}")
+        return []
     }
+
+    def prepareTask = tasks.register("prepareMagiskFiles${variantCapped}", Sync) {
+        dependsOn(variant.assembleProvider)
+
+        outputs.upToDateWhen { false }
+
+        def templatePath = "$rootDir/template/magisk_module"
+        into magiskDir
+        from(templatePath) { exclude 'module.prop' }
+        from(templatePath) {
+            include 'module.prop'
+            def props = getModuleProps()
+            expand([
+                    id         : magiskModuleId,
+                    name       : moduleName,
+                    version    : props.versionName,
+                    versionCode: props.versionCode,
+                    author     : moduleAuthor,
+                    description: moduleDescription,
+            ])
+            filter(FixCrLfFilter.class, eol: FixCrLfFilter.CrLf.newInstance("lf"))
+        }
+        from("$buildDir/intermediates/stripped_native_libs/$variantLowered/out/lib") { into 'lib' }
+        doLast {
+            file("$magiskDir/zygisk").mkdir()
+            fileTree("$magiskDir/lib").visit { f ->
+                if (!f.directory) return
+                def srcPath = Paths.get("${f.file.absolutePath}/lib${moduleLibraryName}.so")
+                def dstPath = Paths.get("$magiskDir/zygisk/${f.path}.so")
+                Files.move(srcPath, dstPath)
+            }
+            new File("$magiskDir/lib").deleteDir()
+        }
+    }
+
+    def zipTask = tasks.register("zip${variantCapped}", Zip) {
+        dependsOn(prepareTask)
+        from magiskDir
+        archiveFileName.set(provider {
+            def props = getModuleProps()
+            "${magiskModuleId.replace('_', '-')}-${props.versionName}-${variantLowered}.zip"
+        })
+        destinationDirectory.set(outDir)
+    }
+
+    tasks.register("push${variantCapped}", Exec) {
+        dependsOn(zipTask)
+        workingDir outDir
+        doFirst {
+            def zipName = zipTask.get().archiveFileName.get()
+            commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["push", zipName, "/data/local/tmp/"]
+            println "Executing command: " + commandLine.join(" ")
+        }
+    }
+
+    def flashTask = tasks.register("flash${variantCapped}", Exec) {
+        dependsOn("push${variantCapped}")
+        doFirst {
+            def zipName = zipTask.get().archiveFileName.get()
+            def reinstallCommand = "'magisk --remove-module ${magiskModuleId} 2>/dev/null ; magisk --install-module /data/local/tmp/${zipName}'"
+            commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", reinstallCommand]
+            println "Executing command: " + commandLine.join(" ")
+        }
+    }
+
+    def cleanupTask = tasks.register("cleanupRemoteZip${variantCapped}", Exec) {
+        dependsOn(flashTask)
+        doFirst {
+            def zipName = zipTask.get().archiveFileName.get()
+            commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", "'rm /data/local/tmp/${zipName}'"]
+            println "Executing command: " + commandLine.join(" ")
+        }
+        ignoreExitValue = true
+    }
+
+    tasks.register("flashAndReboot${variantCapped}", Exec) {
+        dependsOn(cleanupTask)
+        doFirst {
+            commandLine = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "reboot"]
+            println "Executing command: " + commandLine.join(" ")
+        }
+        ignoreExitValue = true
+    }
+
+    // Привязываем финальную задачу (zip) к задаче сборки варианта
+    variant.assembleProvider.get().finalizedBy(zipTask)
 }
+// ===================================================================
+// ===== КОНЕЦ: Новый, совместимый способ создания задач ===========
+// ===================================================================
+
 
 // ===================================================================
 // ===== НАЧАЛО: Скрипт для скачивания Dobby и других зависимостей =====
 // ===================================================================
 
-// 1. Секция для конфигурации
 ext {
-    // URL вашего архива с зависимостями. Он тот же самый.
     depsUrl = "https://github.com/MKSO4KA/LsPosedBaseBridge/releases/download/v1.0.0-libs/lsBaseBridge-mod-deps-v1.0.zip.zip"
-
-    // Определяем пути. Они немного отличаются от LSPosed-проекта,
-    // так как мы находимся внутри под-модуля 'module'.
-    // '$projectDir' здесь указывает на папку 'Zygisk-Il2CppDumper-Fork/module/'.
-    jniDir = file("$projectDir/src/main/cpp") // <-- Путь к папке с C++ кодом
+    jniDir = file("$projectDir/src/main/cpp")
     jniIncludeDir = file("$jniDir/include")
     jniLibsDir = file("$jniDir/libs")
-
-    // Временный файл для скачивания
     depsZip = file("$buildDir/tmp/dependencies.zip")
 }
 
-// 2. Задача для скачивания и распаковки
 task downloadAndUnzipDependencies {
     description "Downloads and unzips all prebuilt JNI dependencies (Dobby)."
     group "build setup"
 
-    // Gradle будет проверять наличие этих папок, чтобы не выполнять задачу повторно
     outputs.dir(jniIncludeDir)
     outputs.dir(jniLibsDir)
 
     doLast {
         println "Downloading JNI dependencies from ${depsUrl}..."
         depsZip.getParentFile().mkdirs()
-
-        // Используем ant для скачивания
         ant.get(src: depsUrl, dest: depsZip)
 
         println "Download complete. Unzipping dependencies..."
-
-        // --- Распаковка заголовочных файлов (.h) ---
-        // Цель: /module/src/main/cpp/include/dobby.h
         copy {
             from zipTree(depsZip)
-            include 'include/**' // Берем из архива папку 'include'
-            into jniDir         // Копируем в /module/src/main/cpp/
-            // Gradle сам создаст папку 'include' внутри.
+            include 'include/**'
+            into jniDir
         }
-
-        // --- Распаковка нативных библиотек (.a) ---
-        // Цель: /module/src/main/cpp/libs/[архитектура]/libdobby.a
         copy {
             from zipTree(depsZip)
-            include 'libs/**'    // Берем из архива папку 'libs'
-            into jniDir          // Копируем в /module/src/main/cpp/
+            include 'libs/**'
+            into jniDir
         }
 
         println "Cleaning up temporary zip file..."
@@ -279,9 +254,6 @@ task downloadAndUnzipDependencies {
     }
 }
 
-// 3. "Привязка" к сборке
-// Мы хотим, чтобы наша задача выполнялась перед тем, как CMake начнет свою работу.
-// 'preBuild' - идеальный кандидат.
 tasks.named("preBuild").configure {
     dependsOn downloadAndUnzipDependencies
 }
