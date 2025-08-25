@@ -1,3 +1,15 @@
+// ==================================================================
+// ===== ИСПРАВЛЕНИЕ №1: Защита от повторного включения =============
+// ==================================================================
+#ifndef ZYGISK_IL2CPPDUMPER_IL2CPP_CLASS_H
+#define ZYGISK_IL2CPPDUMPER_IL2CPP_CLASS_H
+
+// ==================================================================
+// ===== ИСПРАВЛЕНИЕ №2: Подключение стандартных заголовков =========
+// ==================================================================
+#include <cstdint>
+#include <cstddef>
+
 typedef uint16_t Il2CppChar;
 typedef uintptr_t il2cpp_array_size_t;
 typedef int32_t TypeDefinitionIndex;
@@ -141,3 +153,5 @@ typedef struct Il2CppArray {
     il2cpp_array_size_t max_length;
     void *vector[32];
 } Il2CppArray;
+
+#endif //ZYGISK_IL2CPPDUMPER_IL2CPP_CLASS_H

@@ -27,17 +27,13 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_FLAGS} ${CXX_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LINKER_FLAGS}")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LINKER_FLAGS}")
 
-# =================================================
-# ===== НАЧАЛО ИЗМЕНЕНИЙ ==========================
-# =================================================
-
-# 1. Добавляем пути к заголовочным файлам (включая dobby.h)
+# 1. Добавляем пути к заголовочным файлам
 include_directories(
         xdl/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# 2. Определяем статическую библиотеку Dobby
+# 2. Определяем статическую библиотеку Dobby (остается на случай будущих хуков)
 add_library(dobby STATIC IMPORTED)
 set_target_properties(dobby PROPERTIES IMPORTED_LOCATION
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/${ANDROID_ABI}/libdobby.a)
@@ -49,31 +45,17 @@ add_library(${MODULE_NAME} SHARED
         main.cpp
         hack.cpp
         il2cpp_dump.cpp
-        GodModeHook.cpp # <-- Добавляем новый файл
-        HookManager.cpp
+        HookManager.cpp # <-- ДОБАВЛЯЕМ НАШ НОВЫЙ ФАЙЛ
         ${xdl-src})
 
-# =================================================
-# ===== НАЧАЛО: Передача конфигурации в C++ =======
-# =================================================
-
-# Создаем C++ макросы из переменных, полученных от Gradle
-# Теперь в C++ коде будут доступны DUMP_BINARY_ENABLED и DUMP_CS_ENABLED
+# Передача конфигурации в C++
 target_compile_definitions(${MODULE_NAME} PRIVATE
         DUMP_BINARY_ENABLED=${CONFIG_DUMP_BINARY}
         DUMP_CS_ENABLED=${CONFIG_DUMP_CS}
 )
 
-# =================================================
-# ===== КОНЕЦ: Передача конфигурации в C++ ========
-# =================================================
-
 # 4. Линкуем нашу библиотеку с log и dobby
 target_link_libraries(${MODULE_NAME} log dobby)
-
-# =================================================
-# ===== КОНЕЦ ИЗМЕНЕНИЙ ===========================
-# =================================================
 
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_custom_command(TARGET ${MODULE_NAME} POST_BUILD

@@ -23,8 +23,7 @@
 #include "log.h"
 #include "il2cpp-tabledefs.h"
 #include "il2cpp-class.h"
-#include "GodModeHook.h" // <-- ДОБАВИТЬ ЭТУ СТРОКУ
-
+#include "HookManager.h" // <-- ПОДКЛЮЧАЕМ НАШ МЕНЕДЖЕР
 
 #define DO_API(r, n, p) r (*n) p
 
@@ -32,71 +31,48 @@
 
 #undef DO_API
 
-void initialize_hooks(uint64_t il2cpp_base) {
-    LOGI("Initializing all hooks...");
-    GodModeHook::install(il2cpp_base);
-    // Если в будущем появится новый хук, например, "UnlimitedManaHook",
-    // вы просто добавите сюда одну строку:
-    // UnlimitedManaHook::install(il2cpp_base);
-}
-
 static uint64_t il2cpp_base = 0;
 
-// ==================================================================
-// ===== НАЧАЛО КОДА ДЛЯ ОБМЕНА ЧЕРЕЗ SOCKET ========================
-// ==================================================================
+// ... (весь код для send_base_via_socket, dump_method, dump_property и т.д. остается без изменений)
+// ... (пропускаем без изменений до функции il2cpp_api_init)
 
 void send_base_via_socket(uint64_t image_base) {
     const char* server_ip = "127.0.0.1";
-    const int server_port = 58974; // Этот порт должен совпадать с портом в LSPosed-модуле
+    const int server_port = 58974;
 
-    // LSPosed-сервер может запуститься чуть позже, поэтому делаем несколько попыток подключения
     int sock = -1;
-    for (int i = 0; i < 30; ++i) { // Пробуем подключиться в течение 3 секунд
+    for (int i = 0; i < 30; ++i) {
         sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) {
             LOGE("Socket creation error");
             return;
         }
-
         struct sockaddr_in serv_addr;
         serv_addr.sin_family = AF_INET;
         serv_addr.sin_port = htons(server_port);
-
         if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
             LOGE("Invalid address / Address not supported");
             close(sock);
             return;
         }
-
         if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == 0) {
             LOGI("Socket connected on attempt %d", i + 1);
-            break; // Успешное подключение
+            break;
         }
-
         close(sock);
         sock = -1;
-        usleep(100000); // Ждем 100 мс перед следующей попыткой
+        usleep(100000);
     }
-
     if (sock < 0) {
         LOGE("Connection to LSPosed server failed after multiple attempts");
         return;
     }
-
     char address_str[32];
-    // Добавляем \n в конец, так как Java-сервер использует readLine()
     snprintf(address_str, sizeof(address_str), "%" PRIx64 "\n", image_base);
-
     send(sock, address_str, strlen(address_str), 0);
     LOGI("Sent imageBase 0x%" PRIx64 " to localhost:%d", image_base, server_port);
-
     close(sock);
 }
-
-// ==================================================================
-// ===== КОНЕЦ КОДА ДЛЯ ОБМЕНА ЧЕРЕЗ SOCKET =========================
-// ==================================================================
 
 void init_il2cpp_api(void *handle) {
 #define DO_API(r, n, p) {                      \
@@ -105,12 +81,11 @@ void init_il2cpp_api(void *handle) {
         LOGW("api not found %s", #n);          \
     }                                          \
 }
-
 #include "il2cpp-api-functions.h"
-
 #undef DO_API
 }
 
+// ... (пропускаем без изменений до функции il2cpp_api_init)
 std::string get_method_modifier(uint32_t flags) {
     std::stringstream outPut;
     auto access = flags & METHOD_ATTRIBUTE_MEMBER_ACCESS_MASK;
@@ -170,7 +145,6 @@ std::string dump_method(Il2CppClass *klass) {
     outPut << "\n\t// Methods\n";
     void *iter = nullptr;
     while (auto method = il2cpp_class_get_methods(klass, &iter)) {
-        //TODO attribute
         if (method->methodPointer) {
             outPut << "\t// RVA: 0x";
             outPut << std::hex << (uint64_t) method->methodPointer - il2cpp_base;
@@ -179,14 +153,10 @@ std::string dump_method(Il2CppClass *klass) {
         } else {
             outPut << "\t// RVA: 0x VA: 0x0";
         }
-        /*if (method->slot != 65535) {
-            outPut << " Slot: " << std::dec << method->slot;
-        }*/
         outPut << "\n\t";
         uint32_t iflags = 0;
         auto flags = il2cpp_method_get_flags(method, &iflags);
         outPut << get_method_modifier(flags);
-        //TODO genericContainerIndex
         auto return_type = il2cpp_method_get_return_type(method);
         if (_il2cpp_type_is_byref(return_type)) {
             outPut << "ref ";
@@ -223,7 +193,6 @@ std::string dump_method(Il2CppClass *klass) {
             outPut.seekp(-2, outPut.cur);
         }
         outPut << ") { }\n";
-        //TODO GenericInstMethod
     }
     return outPut.str();
 }
@@ -233,7 +202,6 @@ std::string dump_property(Il2CppClass *klass) {
     outPut << "\n\t// Properties\n";
     void *iter = nullptr;
     while (auto prop_const = il2cpp_class_get_properties(klass, &iter)) {
-        //TODO attribute
         auto prop = const_cast<PropertyInfo *>(prop_const);
         auto get = il2cpp_property_get_get_method(prop);
         auto set = il2cpp_property_get_set_method(prop);
@@ -273,7 +241,6 @@ std::string dump_field(Il2CppClass *klass) {
     auto is_enum = il2cpp_class_is_enum(klass);
     void *iter = nullptr;
     while (auto field = il2cpp_class_get_fields(klass, &iter)) {
-        //TODO attribute
         outPut << "\t";
         auto attrs = il2cpp_field_get_flags(field);
         auto access = attrs & FIELD_ATTRIBUTE_FIELD_ACCESS_MASK;
@@ -308,7 +275,6 @@ std::string dump_field(Il2CppClass *klass) {
         auto field_type = il2cpp_field_get_type(field);
         auto field_class = il2cpp_class_from_type(field_type);
         outPut << il2cpp_class_get_name(field_class) << " " << il2cpp_field_get_name(field);
-        //TODO 获取构造函数初始化后的字段值
         if (attrs & FIELD_ATTRIBUTE_LITERAL && is_enum) {
             uint64_t val = 0;
             il2cpp_field_static_get_value(field, &val);
@@ -327,7 +293,6 @@ std::string dump_type(const Il2CppType *type) {
     if (flags & TYPE_ATTRIBUTE_SERIALIZABLE) {
         outPut << "[Serializable]\n";
     }
-    //TODO attribute
     auto is_valuetype = il2cpp_class_is_valuetype(klass);
     auto is_enum = il2cpp_class_is_enum(klass);
     auto visibility = flags & TYPE_ATTRIBUTE_VISIBILITY_MASK;
@@ -367,7 +332,7 @@ std::string dump_type(const Il2CppType *type) {
     } else {
         outPut << "class ";
     }
-    outPut << il2cpp_class_get_name(klass); //TODO genericContainerIndex
+    outPut << il2cpp_class_get_name(klass);
     std::vector<std::string> extends;
     auto parent = il2cpp_class_get_parent(klass);
     if (!is_valuetype && !is_enum && parent) {
@@ -390,27 +355,20 @@ std::string dump_type(const Il2CppType *type) {
     outPut << dump_field(klass);
     outPut << dump_property(klass);
     outPut << dump_method(klass);
-    //TODO EventInfo
     outPut << "}\n";
     return outPut.str();
 }
 
-// Структура для передачи данных в callback-функцию
 struct ModuleInfo {
     uintptr_t base;
     size_t size;
     const char* name;
 };
 
-// Callback-функция для dl_iterate_phdr
 static int find_il2cpp_callback(struct dl_phdr_info *info, size_t size, void *data) {
     auto moduleInfo = reinterpret_cast<ModuleInfo*>(data);
-    // Ищем библиотеку по имени
     if (strstr(info->dlpi_name, moduleInfo->name)) {
         moduleInfo->base = info->dlpi_addr;
-
-        // Вычисляем полный размер модуля в памяти,
-        // проходя по всем его сегментам PT_LOAD
         size_t max_vaddr = 0;
         for (int i = 0; i < info->dlpi_phnum; ++i) {
             const ElfW(Phdr) *phdr = &info->dlpi_phdr[i];
@@ -422,8 +380,6 @@ static int find_il2cpp_callback(struct dl_phdr_info *info, size_t size, void *da
             }
         }
         moduleInfo->size = max_vaddr;
-
-        // Возвращаем ненулевое значение, чтобы остановить итерацию
         return 1;
     }
     return 0;
@@ -431,10 +387,7 @@ static int find_il2cpp_callback(struct dl_phdr_info *info, size_t size, void *da
 
 void dump_memory_to_file(const char *outDir) {
     LOGI("Starting binary dump of libil2cpp.so...");
-
     ModuleInfo moduleInfo = {0, 0, "libil2cpp.so"};
-
-    // Ищем информацию о модуле
     dl_iterate_phdr(find_il2cpp_callback, &moduleInfo);
 
     if (moduleInfo.base == 0 || moduleInfo.size == 0) {
@@ -442,22 +395,16 @@ void dump_memory_to_file(const char *outDir) {
         return;
     }
 
-    // ИСПРАВЛЕННАЯ СТРОКА
     LOGI("libil2cpp.so found in memory: base=0x%" PRIxPTR ", size=%zu bytes", moduleInfo.base, moduleInfo.size);
-
-    // Формируем путь для сохранения файла
     auto outPath = std::string(outDir).append("/files/libil2cpp.decrypted.so");
-
     LOGI("Writing binary dump to: %s", outPath.c_str());
 
-    // Открываем файл для бинарной записи
     std::ofstream outFile(outPath, std::ios::binary | std::ios::out);
     if (!outFile.is_open()) {
         LOGE("Failed to open output file for writing.");
         return;
     }
 
-    // Записываем данные из памяти в файл
     outFile.write(reinterpret_cast<const char*>(moduleInfo.base), moduleInfo.size);
 
     if (outFile.good()) {
@@ -465,7 +412,6 @@ void dump_memory_to_file(const char *outDir) {
     } else {
         LOGE("An error occurred while writing the binary dump.");
     }
-
     outFile.close();
 }
 
@@ -480,9 +426,6 @@ void il2cpp_api_init(void *handle) {
         LOGI("il2cpp_base: %" PRIx64"", il2cpp_base);
 
         if (il2cpp_base > 0) {
-            //hoook
-            initialize_hooks(il2cpp_base);
-            // Запускаем отправку в отдельном потоке, чтобы не блокировать основной
             std::thread(send_base_via_socket, il2cpp_base).detach();
         }
 
@@ -494,8 +437,6 @@ void il2cpp_api_init(void *handle) {
         LOGI("Waiting for il2cpp_init...");
         sleep(1);
     }
-    auto domain = il2cpp_domain_get();
-    il2cpp_thread_attach(domain);
 }
 
 void il2cpp_dump(const char *outDir) {
@@ -519,7 +460,6 @@ void il2cpp_dump(const char *outDir) {
     std::vector<std::string> outPuts;
     if (il2cpp_image_get_class) {
         LOGI("Version greater than 2018.3");
-        //使用il2cpp_image_get_class
         for (int i = 0; i < size; ++i) {
             auto image = il2cpp_assembly_get_image(assemblies[i]);
             std::stringstream imageStr;
@@ -528,54 +468,42 @@ void il2cpp_dump(const char *outDir) {
             for (int j = 0; j < classCount; ++j) {
                 auto klass = il2cpp_image_get_class(image, j);
                 auto type = il2cpp_class_get_type(const_cast<Il2CppClass *>(klass));
-                //LOGD("type name : %s", il2cpp_type_get_name(type));
                 auto outPut = imageStr.str() + dump_type(type);
                 outPuts.push_back(outPut);
             }
         }
     } else {
         LOGI("Version less than 2018.3");
-        //使用反射
         auto corlib = il2cpp_get_corlib();
         auto assemblyClass = il2cpp_class_from_name(corlib, "System.Reflection", "Assembly");
         auto assemblyLoad = il2cpp_class_get_method_from_name(assemblyClass, "Load", 1);
         auto assemblyGetTypes = il2cpp_class_get_method_from_name(assemblyClass, "GetTypes", 0);
-        if (assemblyLoad && assemblyLoad->methodPointer) {
-            LOGI("Assembly::Load: %p", assemblyLoad->methodPointer);
+        if (!assemblyLoad || !assemblyLoad->methodPointer || !assemblyGetTypes || !assemblyGetTypes->methodPointer) {
+             LOGE("Reflection methods not found, cannot dump on this game version.");
         } else {
-            LOGI("miss Assembly::Load");
-            return;
-        }
-        if (assemblyGetTypes && assemblyGetTypes->methodPointer) {
-            LOGI("Assembly::GetTypes: %p", assemblyGetTypes->methodPointer);
-        } else {
-            LOGI("miss Assembly::GetTypes");
-            return;
-        }
-        typedef void *(*Assembly_Load_ftn)(void *, Il2CppString *, void *);
-        typedef Il2CppArray *(*Assembly_GetTypes_ftn)(void *, void *);
-        for (int i = 0; i < size; ++i) {
-            auto image = il2cpp_assembly_get_image(assemblies[i]);
-            std::stringstream imageStr;
-            auto image_name = il2cpp_image_get_name(image);
-            imageStr << "\n// Dll : " << image_name;
-            //LOGD("image name : %s", image->name);
-            auto imageName = std::string(image_name);
-            auto pos = imageName.rfind('.');
-            auto imageNameNoExt = imageName.substr(0, pos);
-            auto assemblyFileName = il2cpp_string_new(imageNameNoExt.data());
-            auto reflectionAssembly = ((Assembly_Load_ftn) assemblyLoad->methodPointer)(nullptr,
-                                                                                        assemblyFileName,
-                                                                                        nullptr);
-            auto reflectionTypes = ((Assembly_GetTypes_ftn) assemblyGetTypes->methodPointer)(
-                    reflectionAssembly, nullptr);
-            auto items = reflectionTypes->vector;
-            for (int j = 0; j < reflectionTypes->max_length; ++j) {
-                auto klass = il2cpp_class_from_system_type((Il2CppReflectionType *) items[j]);
-                auto type = il2cpp_class_get_type(klass);
-                //LOGD("type name : %s", il2cpp_type_get_name(type));
-                auto outPut = imageStr.str() + dump_type(type);
-                outPuts.push_back(outPut);
+            typedef void *(*Assembly_Load_ftn)(void *, Il2CppString *, void *);
+            typedef Il2CppArray *(*Assembly_GetTypes_ftn)(void *, void *);
+            for (int i = 0; i < size; ++i) {
+                auto image = il2cpp_assembly_get_image(assemblies[i]);
+                std::stringstream imageStr;
+                auto image_name = il2cpp_image_get_name(image);
+                imageStr << "\n// Dll : " << image_name;
+                auto imageName = std::string(image_name);
+                auto pos = imageName.rfind('.');
+                auto imageNameNoExt = imageName.substr(0, pos);
+                auto assemblyFileName = il2cpp_string_new(imageNameNoExt.data());
+                auto reflectionAssembly = ((Assembly_Load_ftn) assemblyLoad->methodPointer)(nullptr,
+                                                                                            assemblyFileName,
+                                                                                            nullptr);
+                auto reflectionTypes = ((Assembly_GetTypes_ftn) assemblyGetTypes->methodPointer)(
+                        reflectionAssembly, nullptr);
+                auto items = reflectionTypes->vector;
+                for (int j = 0; j < reflectionTypes->max_length; ++j) {
+                    auto klass = il2cpp_class_from_system_type((Il2CppReflectionType *) items[j]);
+                    auto type = il2cpp_class_get_type(klass);
+                    auto outPut = imageStr.str() + dump_type(type);
+                    outPuts.push_back(outPut);
+                }
             }
         }
     }
@@ -592,5 +520,16 @@ void il2cpp_dump(const char *outDir) {
 #else
     LOGI("CS dump is DISABLED by configuration.");
 #endif
-    LOGI("Il2CppDumper tasks finished.");
+
+    // ==================================================================
+    // ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавляем задержку перед хуком ============
+    // ==================================================================
+    LOGI("Il2CppDumper tasks finished. Waiting for 5 seconds before installing hooks...");
+
+    // Приостанавливаем текущий (фоновый) поток на 5 секунд
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    LOGI("Wait over. Installing hooks now...");
+    HookManager::install_player_action_hooks();
+    // ==================================================================
 }
