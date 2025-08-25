@@ -6,12 +6,7 @@ apply plugin: 'com.android.library'
 apply from: file(rootProject.file('module.gradle'))
 
 android {
-    // ===================================================================
-    // ===== ИСПРАВЛЕНИЕ ЗДЕСЬ ===========================================
-    // ===================================================================
     namespace 'zygisk.il2cppdumper'
-    // ===================================================================
-
     compileSdkVersion rootProject.ext.targetSdkVersion
     ndkVersion '25.2.9519653'
     defaultConfig {
@@ -96,21 +91,25 @@ afterEvaluate {
             commandLine android.adbExecutable, "push", zipName, "/data/local/tmp/"
         }
 
+        // ===================================================================
+        // ===== ИЗМЕНЕНИЕ ЗДЕСЬ ===========================================
+        // ===================================================================
         task("flash${variantCapped}", type: Exec) {
             dependsOn("push${variantCapped}")
             commandLine android.adbExecutable, "shell", "su", "-c",
                     "magisk --install-module /data/local/tmp/${zipName}"
         }
+        // ===================================================================
 
         task("flashAndReboot${variantCapped}", type: Exec) {
             dependsOn("flash${variantCapped}")
             commandLine android.adbExecutable, "shell", "reboot"
+            ignoreExitValue = true // <-- ДОБАВЬТЕ ЭТУ СТРОКУ
         }
 
         variant.assembleProvider.get().finalizedBy("zip${variantCapped}")
     }
 }
-
 
 // ===================================================================
 // ===== НАЧАЛО: Скрипт для скачивания Dobby и других зависимостей =====
