@@ -1,9 +1,17 @@
+// Читаем переменные из gradle.properties
+// Мы должны преобразовать их в нужные типы (Integer)
+def versionMajor = VERSION_MAJOR.toInteger()
+def versionMinor = VERSION_MINOR.toInteger()
+def versionPatch = VERSION_PATCH.toInteger()
+def versionCodeInt = VERSION_CODE.toInteger()
+
 ext {
     moduleLibraryName = "il2cppdumper"
     magiskModuleId = "zygisk_il2cppdumper"
     moduleName = "Il2CppDumper"
     moduleAuthor = "Perfare"
     moduleDescription = "Il2CppDumper Zygisk version."
-    moduleVersion = "v1.5.0"
-    moduleVersionCode = 4
+    // Собираем строку версии из наших переменных
+    moduleVersion = "v${versionMajor}.${versionMinor}.${versionPatch}"
+    moduleVersionCode = versionCodeInt
 }

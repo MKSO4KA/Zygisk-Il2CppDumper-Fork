@@ -5,6 +5,58 @@ import java.nio.file.Files
 apply plugin: 'com.android.library'
 apply from: file(rootProject.file('module.gradle'))
 
+// ===================================================================
+// ===== НАЧАЛО: Задача для автоматического увеличения версии =======
+// ===================================================================
+
+task bumpVersion {
+    description "Increments the patch version and version code in gradle.properties."
+    group "versioning"
+
+    doLast {
+        def propsFile = rootProject.file('gradle.properties')
+        if (!propsFile.exists()) {
+            throw new FileNotFoundException("gradle.properties not found!")
+        }
+
+        // Используем java.util.Properties для корректной работы с файлом
+        def properties = new Properties()
+        propsFile.withInputStream {
+            properties.load(it)
+        }
+
+        // Читаем, увеличиваем и преобразуем обратно в строку
+        def currentPatch = properties.getProperty('VERSION_PATCH', '0').toInteger()
+        def currentCode = properties.getProperty('VERSION_CODE', '1').toInteger()
+
+        def newPatch = currentPatch + 1
+        def newCode = currentCode + 1
+
+        properties.setProperty('VERSION_PATCH', newPatch.toString())
+        properties.setProperty('VERSION_CODE', newCode.toString())
+
+        // Сохраняем изменения
+        propsFile.withOutputStream {
+            properties.store(it, "Version properties updated by bumpVersion task")
+        }
+
+        // Выводим информацию в консоль
+        def newVersionName = "v${properties.getProperty('VERSION_MAJOR')}.${properties.getProperty('VERSION_MINOR')}.${newPatch}"
+        println "Version bumped to ${newVersionName} (Code ${newCode})"
+    }
+}
+
+// Привязываем нашу задачу к стандартным задачам сборки.
+// Теперь перед каждой сборкой версия будет автоматически увеличиваться.
+tasks.named("preBuild").configure {
+    dependsOn bumpVersion
+}
+
+// ===================================================================
+// ===== КОНЕЦ: Задача для автоматического увеличения версии =========
+// ===================================================================
+
+
 android {
     namespace 'zygisk.il2cppdumper'
     compileSdkVersion rootProject.ext.targetSdkVersion
@@ -14,7 +66,14 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         externalNativeBuild {
             cmake {
-                arguments "-DMODULE_NAME:STRING=$moduleLibraryName"
+                // Преобразуем true/false в 1/0 для C++ препроцессора
+                def configDumpBinary = DUMP_BINARY_ENABLED.toBoolean() ? "1" : "0"
+                def configDumpCs = DUMP_CS_ENABLED.toBoolean() ? "1" : "0"
+
+                // Передаем флаги в CMake
+                arguments "-DMODULE_NAME:STRING=$moduleLibraryName",
+                        "-DCONFIG_DUMP_BINARY=${configDumpBinary}",
+                        "-DCONFIG_DUMP_CS=${configDumpCs}"
             }
         }
     }
@@ -33,39 +92,63 @@ repositories {
     mavenLocal()
 }
 
+// ===================================================================
+// ===== НАЧАЛО: Функция для "ленивого" чтения properties ==========
+// ===================================================================
+// Эта функция будет читать gradle.properties в момент выполнения,
+// а не на этапе конфигурации, чтобы получить обновленную версию.
+def getModuleProps() {
+    def propsFile = rootProject.file('gradle.properties')
+    def properties = new Properties()
+    propsFile.withInputStream { properties.load(it) }
+
+    def major = properties.getProperty('VERSION_MAJOR')
+    def minor = properties.getProperty('VERSION_MINOR')
+    def patch = properties.getProperty('VERSION_PATCH')
+    def code = properties.getProperty('VERSION_CODE')
+
+    return [
+            versionName: "v${major}.${minor}.${patch}",
+            versionCode: code
+    ]
+}
+// ===================================================================
+// ===== КОНЕЦ: Функция для "ленивого" чтения properties ===========
+// ===================================================================
+
 afterEvaluate {
     android.libraryVariants.forEach { variant ->
         def variantCapped = variant.name.capitalize()
         def variantLowered = variant.name.toLowerCase()
 
-        def zipName = "${magiskModuleId.replace('_', '-')}-${moduleVersion}-${variantLowered}.zip"
         def magiskDir = file("$outDir/magisk_module_$variantLowered")
+
+        def adbDeviceArgs = provider {
+            if (project.hasProperty('ADB_DEVICE_SERIAL') && !ADB_DEVICE_SERIAL.isEmpty()) {
+                return ['-s', ADB_DEVICE_SERIAL]
+            }
+            return []
+        }
 
         task("prepareMagiskFiles${variantCapped}", type: Sync) {
             dependsOn("assemble$variantCapped")
-
             def templatePath = "$rootDir/template/magisk_module"
-
             into magiskDir
-            from(templatePath) {
-                exclude 'module.prop'
-            }
+            from(templatePath) { exclude 'module.prop' }
             from(templatePath) {
                 include 'module.prop'
+                def props = getModuleProps()
                 expand([
                         id         : magiskModuleId,
                         name       : moduleName,
-                        version    : moduleVersion,
-                        versionCode: moduleVersionCode.toString(),
+                        version    : props.versionName,
+                        versionCode: props.versionCode,
                         author     : moduleAuthor,
                         description: moduleDescription,
                 ])
-                filter(FixCrLfFilter.class,
-                        eol: FixCrLfFilter.CrLf.newInstance("lf"))
+                filter(FixCrLfFilter.class, eol: FixCrLfFilter.CrLf.newInstance("lf"))
             }
-            from("$buildDir/intermediates/stripped_native_libs/$variantLowered/out/lib") {
-                into 'lib'
-            }
+            from("$buildDir/intermediates/stripped_native_libs/$variantLowered/out/lib") { into 'lib' }
             doLast {
                 file("$magiskDir/zygisk").mkdir()
                 fileTree("$magiskDir/lib").visit { f ->
@@ -81,30 +164,54 @@ afterEvaluate {
         task("zip${variantCapped}", type: Zip) {
             dependsOn("prepareMagiskFiles${variantCapped}")
             from magiskDir
-            archiveFileName.set(zipName)
+            archiveFileName.set(provider {
+                def props = getModuleProps()
+                "${magiskModuleId.replace('_', '-')}-${props.versionName}-${variantLowered}.zip"
+            })
             destinationDirectory.set(outDir)
         }
 
         task("push${variantCapped}", type: Exec) {
             dependsOn("zip${variantCapped}")
             workingDir outDir
-            commandLine android.adbExecutable, "push", zipName, "/data/local/tmp/"
+            doFirst {
+                def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
+                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["push", zipName, "/data/local/tmp/"]
+                println "Executing command: " + finalCommand.join(" ")
+                commandLine = finalCommand
+            }
         }
 
-        // ===================================================================
-        // ===== ИЗМЕНЕНИЕ ЗДЕСЬ ===========================================
-        // ===================================================================
         task("flash${variantCapped}", type: Exec) {
             dependsOn("push${variantCapped}")
-            commandLine android.adbExecutable, "shell", "su", "-c",
-                    "magisk --install-module /data/local/tmp/${zipName}"
+            doFirst {
+                def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
+                def reinstallCommand = "'magisk --remove-module ${magiskModuleId} ; magisk --install-module /data/local/tmp/${zipName}'"
+                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", reinstallCommand]
+                println "Executing command: " + finalCommand.join(" ")
+                commandLine = finalCommand
+            }
         }
-        // ===================================================================
+
+        task("cleanupRemoteZip${variantCapped}", type: Exec) {
+            dependsOn("flash${variantCapped}")
+            doFirst {
+                def zipName = tasks.named("zip${variantCapped}").get().archiveFileName.get()
+                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "su", "-c", "rm /data/local/tmp/${zipName}"]
+                println "Executing command: " + finalCommand.join(" ")
+                commandLine = finalCommand
+            }
+            ignoreExitValue = true
+        }
 
         task("flashAndReboot${variantCapped}", type: Exec) {
-            dependsOn("flash${variantCapped}")
-            commandLine android.adbExecutable, "shell", "reboot"
-            ignoreExitValue = true // <-- ДОБАВЬТЕ ЭТУ СТРОКУ
+            dependsOn("cleanupRemoteZip${variantCapped}")
+            doFirst {
+                def finalCommand = [android.adbExecutable] + adbDeviceArgs.get() + ["shell", "reboot"]
+                println "Executing command: " + finalCommand.join(" ")
+                commandLine = finalCommand
+            }
+            ignoreExitValue = true
         }
 
         variant.assembleProvider.get().finalizedBy("zip${variantCapped}")

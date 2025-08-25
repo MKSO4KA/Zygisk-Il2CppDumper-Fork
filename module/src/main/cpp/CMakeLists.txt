@@ -53,6 +53,21 @@ add_library(${MODULE_NAME} SHARED
         HookManager.cpp
         ${xdl-src})
 
+# =================================================
+# ===== НАЧАЛО: Передача конфигурации в C++ =======
+# =================================================
+
+# Создаем C++ макросы из переменных, полученных от Gradle
+# Теперь в C++ коде будут доступны DUMP_BINARY_ENABLED и DUMP_CS_ENABLED
+target_compile_definitions(${MODULE_NAME} PRIVATE
+        DUMP_BINARY_ENABLED=${CONFIG_DUMP_BINARY}
+        DUMP_CS_ENABLED=${CONFIG_DUMP_CS}
+)
+
+# =================================================
+# ===== КОНЕЦ: Передача конфигурации в C++ ========
+# =================================================
+
 # 4. Линкуем нашу библиотеку с log и dobby
 target_link_libraries(${MODULE_NAME} log dobby)
 

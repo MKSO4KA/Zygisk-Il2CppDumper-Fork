@@ -499,9 +499,15 @@ void il2cpp_api_init(void *handle) {
 }
 
 void il2cpp_dump(const char *outDir) {
-    LOGI("dumping binary file...");
+#if DUMP_BINARY_ENABLED
+    LOGI("Binary dump is ENABLED by configuration. Starting...");
     dump_memory_to_file(outDir);
-    LOGI("dumping else...");
+#else
+    LOGI("Binary dump is DISABLED by configuration.");
+#endif
+
+#if DUMP_CS_ENABLED
+    LOGI("CS dump is ENABLED by configuration. Starting...");
     size_t size;
     auto domain = il2cpp_domain_get();
     auto assemblies = il2cpp_domain_get_assemblies(domain, &size);
@@ -582,5 +588,9 @@ void il2cpp_dump(const char *outDir) {
         outStream << outPuts[i];
     }
     outStream.close();
-    LOGI("dump done!");
+    LOGI("CS dump done!");
+#else
+    LOGI("CS dump is DISABLED by configuration.");
+#endif
+    LOGI("Il2CppDumper tasks finished.");
 }
