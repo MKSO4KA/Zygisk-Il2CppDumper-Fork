@@ -1,0 +1,28 @@
+{
+  "keywords": [
+    "OnClick",
+    "ButtonPressed",
+    "Purchase",
+    "Reward",
+    "Cheat",
+    "Debug",
+    "Money",
+    "Gold",
+    "Gems"
+  ],
+  "blacklist": [
+    "SomeClass::Update",
+    "AnotherClass::SomeVeryCommonMethod"
+  ],
+  "class_blacklist": [
+    "UnityEngine.Analytics.Analytics",
+    "UnityEngine.CrashReportHandler.CrashReportHandler"
+  ],
+  "dll_blacklist": [
+    "mscorlib.dll",
+    "System.dll",
+    "System.Core.dll",
+    "UnityEngine.CoreModule.dll"
+  ],
+  "enable_hook_call_logging": true
+}
